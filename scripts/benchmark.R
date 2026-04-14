@@ -1,4 +1,4 @@
-# Benchmark: sepcor block-coordinate descent vs. optim (L-BFGS-B)
+# Benchmark: sepcor block-coordinate descent vs. optim (BFGS)
 #
 # Both optimize the same profile log-likelihood. The custom algorithm
 # exploits the Kronecker structure; optim treats it as a dense problem.

@@ -1,4 +1,4 @@
-# Figure: Computation time of sepcor vs. L-BFGS-B (optim)
+# Figure: Computation time of sepcor vs. BFGS (optim)
 #
 # Usage: Rscript scripts/fig_benchmark.R
 # Output: Figures/fig_benchmark.pdf

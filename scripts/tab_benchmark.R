@@ -1,4 +1,4 @@
-# Table: Computing time of sepcor vs. L-BFGS-B
+# Table: Computing time of sepcor vs. BFGS
 # Averages over 5 replications per setting.
 #
 # Usage: Rscript scripts/tab_benchmark.R
