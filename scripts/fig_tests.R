@@ -13,13 +13,15 @@ library(sepcor)
 library(splines)
 library(dplyr)
 library(ggplot2)
-library(parallel)
+library(foreach)
+library(doParallel)
+library(doRNG)
 library(patchwork)
 
 set.seed(2027)
 m      <- 200   # replications per setting
 B      <- 199   # bootstrap samples per replication
-n_cores <- max(1L, detectCores() - 1L)
+n_cores <- max(1L, parallel::detectCores() - 1L)
 
 # ---- Fit models to data to obtain DGP parameters ---------------------------
 use_data_do <- readRDS("~/GDrive/Work/Consulting/USGS/Data/use_data_do.rds") %>%
@@ -118,6 +120,13 @@ if (file.exists(cache_file)) {
   cat("Loaded results from cache.\n")
 } else {
 
+  # Reproducible, fork-free parallelism (PSOCK + doRNG); see tab_boundary.R.
+  cl <- parallel::makeCluster(n_cores)
+  doParallel::registerDoParallel(cl)
+  invisible(parallel::clusterEvalQ(cl, Sys.setenv(VECLIB_MAXIMUM_THREADS = "1",
+                                                  OMP_NUM_THREADS = "1")))
+  parallel::clusterExport(cl, ls(globalenv()), envir = globalenv())
+
   # Test (a)
   n_vals_a <- c(15, 20, 25, 35, 50, 75, 100)
   results_a <- data.frame()
@@ -125,10 +134,10 @@ if (file.exists(cache_file)) {
   for (dgp in c("sepcov", "sepcor")) {
     Sig_c <- if (dgp == "sepcov") Sig_c_cov else Sig_c_cor
     for (n_sim in n_vals_a) {
-      res <- mclapply(seq_len(m), function(j) {
+      res <- foreach(j = seq_len(m), .packages = "sepcor") %dorng% {
         E <- Sig_c %*% matrix(rnorm(q * n_sim), ncol = n_sim)
         run_test_a(E)
-      }, mc.cores = n_cores)
+      }
       rej_boot  <- mean(sapply(res, `[`, "boot"),  na.rm = TRUE)
       rej_asymp <- mean(sapply(res, `[`, "asymp"), na.rm = TRUE)
       results_a <- rbind(results_a,
@@ -146,10 +155,10 @@ if (file.exists(cache_file)) {
   results_b <- data.frame()
 
   for (n_sim in n_vals_b) {
-    res <- mclapply(seq_len(m), function(j) {
+    res <- foreach(j = seq_len(m), .packages = "sepcor") %dorng% {
       E <- Sig_c_cor %*% matrix(rnorm(q * n_sim), ncol = n_sim)
       run_test_b(E)
-    }, mc.cores = n_cores)
+    }
     rej_boot  <- mean(sapply(res, `[`, "boot"),  na.rm = TRUE)
     rej_asymp <- mean(sapply(res, `[`, "asymp"), na.rm = TRUE)
     results_b <- rbind(results_b,
@@ -157,6 +166,8 @@ if (file.exists(cache_file)) {
       data.frame(n = n_sim, test = "Asymptotic LRT", rej = rej_asymp))
     cat(sprintf("(b) n=%3d  boot=%.2f  asymp=%.2f\n", n_sim, rej_boot, rej_asymp))
   }
+
+  parallel::stopCluster(cl)
 
   saveRDS(list(results_a = results_a, results_b = results_b), cache_file)
   cat("Saved results to cache.\n")
@@ -208,5 +219,6 @@ p_b <- ggplot(results_b,
 p <- (p_a | p_b) + plot_layout(guides = "collect") &
   theme(legend.position = "bottom")
 
+dir.create("Figures", showWarnings = FALSE, recursive = TRUE)
 ggsave("Figures/fig_tests.pdf", p, width = 10, height = 3.5)
 cat("Saved Figures/fig_tests.pdf\n")

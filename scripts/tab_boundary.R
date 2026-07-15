@@ -11,12 +11,25 @@
 # Output: printed LaTeX table
 
 library(sepcor)
-library(parallel)
+library(foreach)
+library(doParallel)
+library(doRNG)
 
 set.seed(2028)
 n_datasets <- 50
 n_starts   <- 20
-n_cores    <- max(1L, detectCores() - 1L)
+n_cores    <- max(1L, parallel::detectCores() - 1L)
+
+# Reproducible, fork-free parallelism. A PSOCK cluster avoids forking, which is
+# unsafe with Apple's Accelerate (veclib) BLAS; doRNG's %dorng% gives one
+# independent, backend-independent RNG stream per iteration, so results are
+# reproducible from set.seed() above. Each worker is pinned to a single BLAS
+# thread to avoid oversubscription.
+cl <- parallel::makeCluster(n_cores)
+doParallel::registerDoParallel(cl)
+invisible(parallel::clusterEvalQ(cl, Sys.setenv(VECLIB_MAXIMUM_THREADS = "1",
+                                                OMP_NUM_THREADS = "1")))
+parallel::clusterExport(cl, "n_starts")
 
 # ---- Derksen & Makam (2021) Theorem 1.3 ------------------------------------
 gcd <- function(a, b) if (b == 0L) a else Recall(b, a %% b)
@@ -45,7 +58,7 @@ check_n <- function(r, cc, n) {
   V0  <- 0.5^abs(outer(seq_len(r),  seq_len(r),  "-"))
   Sig_c <- kronecker(t(chol(U0)), t(chol(V0)))
 
-  res <- mclapply(seq_len(n_datasets), function(d) {
+  res <- foreach(d = seq_len(n_datasets), .packages = "sepcor") %dorng% {
     E <- Sig_c %*% matrix(rnorm(q * n), ncol = n)
     S <- tcrossprod(E) / n
     params    <- vector("list", n_starts)
@@ -68,12 +81,15 @@ check_n <- function(r, cc, n) {
       }
     }
     is_unique <- if (!all_conv) FALSE else {
-      # All starts converged: check all parameter vectors agree
+      # All starts converged: parameter vectors agree. The tolerance is loose
+      # because same-optimum fits differ by ~1e-3 at convergence tolerance 1e-8
+      # (the log-likelihood is flat near the maximum); a tighter tolerance would
+      # mislabel this convergence noise as non-uniqueness.
       ref <- params[[1L]]
-      all(sapply(params[-1L], function(p) max(abs(p - ref)) < 1e-4))
+      all(sapply(params[-1L], function(p) max(abs(p - ref)) < 1e-2))
     }
     c(any_conv = any_conv, all_conv = all_conv, unique = is_unique)
-  }, mc.cores = n_cores)
+  }
 
   frac_any    <- mean(sapply(res, `[`, "any_conv"))
   frac_all    <- mean(sapply(res, `[`, "all_conv"))
@@ -144,3 +160,5 @@ cat("\\end{tabular}\n")
 
 saveRDS(results, "scripts/tab_boundary_results.rds")
 cat("Saved results to scripts/tab_boundary_results.rds\n")
+
+parallel::stopCluster(cl)

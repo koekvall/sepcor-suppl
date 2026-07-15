@@ -8,11 +8,13 @@
 # Output: printed table and scripts/tab_coverage_results.rds
 
 library(sepcor)
-library(parallel)
+library(foreach)
+library(doParallel)
+library(doRNG)
 
 set.seed(2029)
 m       <- 500     # replications per setting
-n_cores <- max(1L, detectCores() - 1L)
+n_cores <- max(1L, parallel::detectCores() - 1L)
 alpha   <- 0.05
 z       <- qnorm(1 - alpha / 2)
 
@@ -39,8 +41,15 @@ n_vals <- c(50L, 100L, 320L)
 
 results <- data.frame()
 
+# Reproducible, fork-free parallelism (PSOCK + doRNG); see tab_boundary.R.
+cl <- parallel::makeCluster(n_cores)
+doParallel::registerDoParallel(cl)
+invisible(parallel::clusterEvalQ(cl, Sys.setenv(VECLIB_MAXIMUM_THREADS = "1",
+                                                OMP_NUM_THREADS = "1")))
+parallel::clusterExport(cl, ls(globalenv()), envir = globalenv())
+
 for (n_sim in n_vals) {
-  res <- mclapply(seq_len(m), function(j) {
+  res <- foreach(j = seq_len(m), .packages = "sepcor") %dorng% {
     E  <- Sig_c %*% matrix(rnorm(q * n_sim), ncol = n_sim)
     fc <- tryCatch(sepcor(E, r), error = function(e) list(info = -1L))
     if (fc$info != 0L) return(NULL)
@@ -64,7 +73,7 @@ for (n_sim in n_vals) {
     )
 
     list(cov_C2 = cov_C2, cov_C1 = cov_C1)
-  }, mc.cores = n_cores)
+  }
 
   # Drop NULLs (non-converged or SE failures)
   res <- Filter(Negate(is.null), res)
@@ -93,3 +102,5 @@ print(results)
 
 saveRDS(results, "scripts/tab_coverage_results.rds")
 cat("Saved to scripts/tab_coverage_results.rds\n")
+
+parallel::stopCluster(cl)
