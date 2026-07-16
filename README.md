@@ -1,39 +1,49 @@
 # Supplementary code for "Likelihood-Based Inference with Separable Correlation Matrices"
 
-Code to reproduce the simulations, tables, figures, and data example in the paper.
+Code to reproduce the tables, figures, and data example in the paper. Each
+script is self-contained and can be run on its own from the repository root.
 
 ## Prerequisites
 
 ```r
-install.packages(c("ggplot2", "tidyr", "patchwork", "splines", "dplyr"))
-devtools::install_github("koekvall/sepcor")  # or install from local copy
+install.packages(c("ggplot2", "MASS", "splines", "dplyr", "foreach",
+                   "doParallel", "doRNG"))
+devtools::install_github("koekvall/sepcor")  # or install from a local copy
 ```
 
-## Structure
+## Scripts by paper result
 
-- `scripts/run_all.R` — master script that sources the simulation scripts below
-- `scripts/fig_error.R` — Figure 1 (estimation error vs. sample size)
-- `scripts/fig_tests.R` — Figure 2 (bootstrap and asymptotic test rejection rates)
-- `scripts/tab_boundary.R` — Table 1 (sample size thresholds for existence/uniqueness)
-- `scripts/tab_benchmark.R` — Table 2 (computing time comparison)
-- `scripts/benchmark.R` — timing benchmarks
-- `scripts/fig_benchmark.R` — benchmark figures
-- `scripts/fig_boundary.R` — boundary threshold figures
-- `scripts/tab_coverage.R` — Wald interval coverage rates
-- `data_example/data_example.R` — dissolved oxygen data example (Section 3)
-- `data_example/use_data_do.rds` — prepared dissolved oxygen data
-- `counterexample.R` — numerical exploration of sample size conditions
+| Paper result | Script |
+|--------------|--------|
+| Figure 1 (data-example covariance heatmaps) | `scripts/fig_data_example.R` |
+| Figure 2 (data-example variances by season)  | `scripts/fig_data_example.R` |
+| Figure 3 (estimation error vs. sample size)  | `scripts/fig_error.R` |
+| Figure 4 (test rejection rates)              | `scripts/fig_tests.R` |
+| Table 1 (existence/uniqueness thresholds)    | `scripts/tab_boundary.R` |
+| Table 2 (computing-time comparison)          | `scripts/tab_benchmark.R` |
+| Coverage rates (Section 5 text)              | `scripts/tab_coverage.R` |
+| Data example: estimates, standard errors, Wald test, bootstrap LRT, timings, multi-start diagnostic (Section 3) | `data_example/data_example.R` |
 
-## Reproducing the simulations
+Figures are written to `Figures/` (git-ignored); the `tab_*` scripts print a
+LaTeX table and cache their results in `scripts/*_results.rds`.
 
-From the repository root:
+## Data
+
+- `data_example/use_data_do.rds` — prepared dissolved oxygen data (Upper
+  Mississippi River) used by the data-example scripts.
+
+## Other scripts
+
+- `counterexample.R` — numerical check of a conjectured sample-size condition;
+  not used for any paper float.
+- `scripts/benchmark.R`, `scripts/fig_benchmark.R`, `scripts/fig_boundary.R` —
+  exploratory timing and threshold plots not included in the paper.
+
+## Reproducing a single result
+
+From the repository root, for example:
 
 ```bash
-Rscript scripts/run_all.R
-```
-
-For the data example:
-
-```bash
+Rscript scripts/fig_data_example.R
 Rscript data_example/data_example.R
 ```
