@@ -42,19 +42,19 @@ make_theta0 <- function(E, nr, nc) {
 }
 
 # ---- Analytic score for optim ----------------------------------------------
-# With Sigma = D (C2 %x% C1) D, Sbar the average residual outer product,
-# G = Sigma^-1 Sbar Sigma^-1 - Sigma^-1, and H = D G D:
-#   d ll / d [C1]_{ab}  = n [sum_{j,j'} [C2]_{j'j} H_{(j,j')}]_{ab},
-#   d ll / d [C2]_{ab}  = n tr(H_{(a,b)} C1) (symmetrized),
-#   d ll / d log d_j    = n ([Sigma^-1 Sbar]_{jj} - 1),
-# where H_{(j,j')} is the (j,j')th r x r block of H. Verified against
-# central finite differences of prof_log_lik_sep.
+# Uses the package's C++ gradient of the profile log-likelihood for the two
+# correlation blocks and a light Kronecker-structured computation for the
+# log-standard-deviation block, avoiding any dense q x q matrix. Concretely,
+# with tilde-E = E / d (columnwise), the package routine ll_grad_UV returns the
+# gradient with respect to C2 and C1; the log-d block uses
+#   d ll / d log d_j = [sum_i (C1^-1 tilde-E_i C2^-1) o tilde-E_i]_j - n,
+# where tilde-E_i is the j-th residual matricized to r x c. Verified against
+# central finite differences of prof_log_lik_sep (agreement to 3+ decimals).
 make_gr <- function(E, nr, nc) {
   n_U   <- nc * (nc - 1L) / 2L
   n_V   <- nr * (nr - 1L) / 2L
   q     <- nr * nc
   n_obs <- ncol(E)
-  Sbar  <- tcrossprod(E) / n_obs
   function(theta) {
     C2 <- diag(nc)
     C2[upper.tri(C2)] <- theta[seq_len(n_U)]
@@ -63,22 +63,20 @@ make_gr <- function(E, nr, nc) {
     C1[upper.tri(C1)] <- theta[n_U + seq_len(n_V)]
     C1[lower.tri(C1)] <- t(C1)[lower.tri(C1)]
     d  <- exp(theta[n_U + n_V + seq_len(q)])
-    Sigma <- d * t(d * kronecker(C2, C1))
-    Si  <- tryCatch(chol2inv(chol(Sigma)), error = function(e) NULL)
-    if (is.null(Si)) return(rep(0, length(theta)))
-    SiS <- Si %*% Sbar
-    G   <- SiS %*% Si - Si
-    H   <- d * t(d * G)
-    M1  <- matrix(0, nr, nr)
-    T2  <- matrix(0, nc, nc)
-    for (j in seq_len(nc)) for (jp in seq_len(nc)) {
-      blk <- H[((j - 1L) * nr + 1L):(j * nr), ((jp - 1L) * nr + 1L):(jp * nr)]
-      M1  <- M1 + C2[jp, j] * blk
-      T2[j, jp] <- sum(blk * C1)
+    Etil <- E / d                                  # tilde-E, columnwise scaling
+    gUV  <- sepcor:::ll_grad_UV(Etil, C2, C1)      # C++ gradient wrt C2, C1
+    G2   <- matrix(gUV[seq_len(nc * nc)], nc, nc)
+    G1   <- matrix(gUV[nc * nc + seq_len(nr * nr)], nr, nr)
+    g_C2 <- (2 * G2)[upper.tri(C2)]
+    g_C1 <- (2 * G1)[upper.tri(C1)]
+    C1i  <- chol2inv(chol(C1))
+    C2i  <- chol2inv(chol(C2))
+    M    <- matrix(0, q, n_obs)
+    for (i in seq_len(n_obs)) {
+      Ei     <- matrix(Etil[, i], nr, nc)
+      M[, i] <- as.vector(C1i %*% Ei %*% C2i)
     }
-    g_C2 <- n_obs * ((T2 + t(T2)) / 2)[upper.tri(T2)]
-    g_C1 <- n_obs * M1[upper.tri(M1)]
-    g_ld <- n_obs * (diag(SiS) - 1)
+    g_ld <- rowSums(M * Etil) - n_obs
     -c(g_C2, g_C1, g_ld)
   }
 }
