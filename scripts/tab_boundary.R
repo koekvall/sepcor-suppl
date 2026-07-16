@@ -20,6 +20,14 @@ n_datasets <- 50
 n_starts   <- 20
 n_cores    <- max(1L, parallel::detectCores() - 1L)
 
+# Random correlation matrix (rescaled Wishart), used to perturb the C1 start ---
+# the correlation matrix that is not updated first, and so shapes the trajectory.
+rand_corr <- function(d){
+  W  <- rWishart(1, d + 1, diag(d))[,,1]
+  Di <- diag(1 / sqrt(diag(W)))
+  Di %*% W %*% Di
+}
+
 # Reproducible, fork-free parallelism. A PSOCK cluster avoids forking, which is
 # unsafe with Apple's Accelerate (veclib) BLAS; doRNG's %dorng% gives one
 # independent, backend-independent RNG stream per iteration, so results are
@@ -29,7 +37,7 @@ cl <- parallel::makeCluster(n_cores)
 doParallel::registerDoParallel(cl)
 invisible(parallel::clusterEvalQ(cl, Sys.setenv(VECLIB_MAXIMUM_THREADS = "1",
                                                 OMP_NUM_THREADS = "1")))
-parallel::clusterExport(cl, "n_starts")
+parallel::clusterExport(cl, c("n_starts", "rand_corr"))
 
 # ---- Derksen & Makam (2021) Theorem 1.3 ------------------------------------
 gcd <- function(a, b) if (b == 0L) a else Recall(b, a %% b)
@@ -65,10 +73,10 @@ check_n <- function(r, cc, n) {
     any_conv  <- FALSE
     all_conv  <- TRUE
     for (s in seq_len(n_starts)) {
-      W_init <- if (s == 1L) diag(S) else
-        (sqrt(pmax(diag(S), 1e-6)) * exp(rnorm(q, 0, 0.5)))^2
+      if (s == 1L) { C1_0 <- diag(r); W0 <- rep(1, q) }
+      else { C1_0 <- rand_corr(r); W0 <- sqrt(pmax(diag(S), 1e-6)) * exp(rnorm(q, 0, 0.5)) }
       fit <- suppressWarnings(
-        sepcor:::sepcor_rcpp(E, W_init, r, 1e-8, 3000L, FALSE, 0)
+        sepcor:::sepcor_rcpp(E, W0, r, 1e-8, 3000L, FALSE, 0, C1_0)
       )
       if (fit$info != 0L) {
         all_conv <- FALSE
