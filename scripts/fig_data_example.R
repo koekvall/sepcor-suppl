@@ -70,7 +70,7 @@ var_df <- rbind(
 )
 
 p_var <- ggplot(var_df, aes(location, variance, shape = Model)) +
-  geom_point(size = 1.4) +
+  geom_point(size = 1.8) +
   facet_wrap(~ season) +
   scale_shape_manual(values = c("Separable correlation" = 16,
                                 "Separable covariance"  = 17)) +
