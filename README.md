@@ -32,13 +32,6 @@ LaTeX table and cache their results in `scripts/*_results.rds`.
 - `data_example/use_data_do.rds` — prepared dissolved oxygen data (Upper
   Mississippi River) used by the data-example scripts.
 
-## Other scripts
-
-- `counterexample.R` — numerical check of a conjectured sample-size condition;
-  not used for any paper float.
-- `scripts/benchmark.R`, `scripts/fig_benchmark.R`, `scripts/fig_boundary.R` —
-  exploratory timing and threshold plots not included in the paper.
-
 ## Reproducing a single result
 
 From the repository root, for example:
