@@ -70,15 +70,17 @@ var_df <- rbind(
 )
 
 p_var <- ggplot(var_df, aes(location, variance, shape = Model)) +
-  geom_point(size = 1.6) +
+  geom_point(size = 1.4) +
   facet_wrap(~ season) +
   scale_shape_manual(values = c("Separable correlation" = 16,
                                 "Separable covariance"  = 17)) +
   labs(x = "Location", y = "Estimated variance", shape = NULL) +
-  theme_bw() +
-  theme(legend.position = "bottom")
+  theme_bw(base_size = 10) +
+  theme(legend.position  = "bottom",
+        panel.grid.minor = element_blank())
 
-ggsave("Figures/var_plot.pdf", p_var,
-       width = 14, height = 5, units = "cm")
+# Saved at the same physical size as Figures 3-4 (inches) so that fonts and
+# points scale down consistently when included at \includegraphics width.
+ggsave("Figures/var_plot.pdf", p_var, width = 10, height = 3)
 
 cat("Wrote Figures/cov_plot_1.pdf, Figures/cov_plot_2.pdf, Figures/var_plot.pdf\n")
